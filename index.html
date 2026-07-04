@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tour des Montres - Genève | Posty78</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{
+    --green: #00cc44;
+    --dark: #111417;
+    --panel: #1b1f24;
+    --text: #eef1f3;
+    --muted: #9aa4ad;
+    --danger: #ff4d4d;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--dark);color:var(--text);}
+  #app{display:flex;flex-direction:column;height:100%;}
+
+  header{
+    background:var(--panel);
+    padding:10px 14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    border-bottom:2px solid var(--green);
+    flex-wrap:wrap;
+  }
+  header h1{font-size:16px;margin:0;color:var(--green);}
+  header .stats{font-size:13px;color:var(--muted);}
+  header .stats b{color:var(--text);}
+
+  #progressBarWrap{
+    height:6px;background:#2a2f36;width:100%;
+  }
+  #progressBar{
+    height:100%;background:var(--green);width:0%;transition:width .3s;
+  }
+
+  #map{flex:1;min-height:0;}
+
+  .controls{
+    display:flex;gap:8px;padding:8px 12px;background:var(--panel);flex-wrap:wrap;
+    border-top:1px solid #2a2f36;
+  }
+  select,button{
+    background:#2a2f36;color:var(--text);border:1px solid #3a4048;
+    border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer;
+  }
+  button.primary{background:var(--green);color:#04220f;font-weight:700;border:none;}
+  button:hover{filter:brightness(1.1);}
+
+  .leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border-radius:10px;}
+  .leaflet-popup-tip{background:var(--panel);}
+  .popup-title{font-weight:700;font-size:15px;margin-bottom:2px;color:var(--green);}
+  .popup-addr{font-size:12px;color:var(--muted);margin-bottom:6px;}
+  .popup-notes{font-size:12px;margin-bottom:8px;}
+  .popup-badge{
+    display:inline-block;font-size:11px;padding:2px 6px;border-radius:6px;
+    background:#2a2f36;margin-bottom:6px;color:var(--muted);
+  }
+  .popup-btns{display:flex;flex-direction:column;gap:6px;}
+  .popup-btns a, .popup-btns button{
+    display:block;text-align:center;text-decoration:none;padding:8px;border-radius:8px;
+    font-size:13px;font-weight:600;
+  }
+  .btn-waze{background:#33ccff;color:#062633;}
+  .btn-gmaps{background:#4285F4;color:white;}
+  .btn-visited{background:#2a2f36;color:var(--text);border:1px solid var(--green);}
+  .btn-visited.done{background:var(--green);color:#04220f;border:none;}
+
+  .num-icon{
+    background:var(--green);color:#04220f;font-weight:800;border-radius:50%;
+    width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+    font-size:12px;border:2px solid #04220f;
+  }
+  .num-icon.visited{background:#555;color:#ccc;opacity:.6;}
+  .num-icon.ext{background:#ffb020;color:#331b00;}
+
+  #legend{
+    position:absolute;bottom:70px;left:10px;background:rgba(20,24,28,.9);
+    padding:8px 10px;border-radius:8px;font-size:11px;color:var(--muted);z-index:500;
+    line-height:1.6;
+  }
+  #legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>🕰️ Tour des Montres — Genève</h1>
+    <div class="stats" id="stats">Chargement…</div>
+  </header>
+  <div id="progressBarWrap"><div id="progressBar"></div></div>
+  <div id="map"></div>
+  <div id="legend">
+    <div><span style="background:#00cc44"></span>Centre-ville (parcours à pied)</div>
+    <div><span style="background:#ffb020"></span>Extension (transport nécessaire)</div>
+    <div><span style="background:#555"></span>Déjà visité</div>
+  </div>
+  <div class="controls">
+    <select id="filterZone">
+      <option value="all">Toutes les zones</option>
+      <option value="centre">Centre-ville seulement</option>
+      <option value="extension">Extension seulement</option>
+    </select>
+    <select id="filterStatus">
+      <option value="all">Tout</option>
+      <option value="todo">À faire</option>
+      <option value="done">Visitées</option>
+    </select>
+    <button id="resetBtn">🔄 Réinitialiser toute la checklist</button>
+  </div>
+</div>
+
+<div id="loginModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center;">
+  <div style="background:var(--panel);padding:20px;border-radius:12px;width:280px;border:1px solid var(--green);">
+    <h3 style="margin-top:0;color:var(--green);font-size:15px;">Connexion</h3>
+    <input id="loginEmail" type="email" placeholder="Email" style="width:100%;margin-bottom:8px;padding:8px;border-radius:6px;border:1px solid #3a4048;background:#2a2f36;color:white;">
+    <input id="loginPass" type="password" placeholder="Mot de passe" style="width:100%;margin-bottom:10px;padding:8px;border-radius:6px;border:1px solid #3a4048;background:#2a2f36;color:white;">
+    <div style="display:flex;gap:8px;">
+      <button class="primary" id="doLoginBtn" style="flex:1;">Se connecter</button>
+      <button id="cancelLoginBtn" style="flex:1;">Annuler</button>
+    </div>
+    <div id="loginError" style="color:#ff4d4d;font-size:12px;margin-top:8px;"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- ============ FIREBASE (à configurer, voir instructions en bas du fichier) ============ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script>
+  // 👉 REMPLACE ces valeurs par celles de TON projet Firebase (voir instructions tout en bas)
+  const firebaseConfig = {
+    apiKey: "AIzaSyAjm7AVpgYaxs1xYl4BBaEjfp20sZw9X4o",
+    databaseURL: "https://montres-posty78-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "montres-posty78"
+  };
+  // 👉 REMPLACE par ton UID admin (visible dans Firebase Console > Authentication, après avoir créé ton compte)
+  const ADMIN_UID = "8TINvGuSyfamrTa7r1Cvi25fxvR2";
+
+  let firebaseReady = false;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    firebaseReady = true;
+  } catch(e) {
+    console.warn("Firebase non configuré, fallback en local uniquement.", e);
+  }
+  const db = firebaseReady ? firebase.database() : null;
+  const auth = firebaseReady ? firebase.auth() : null;
+  let isAdmin = false;
+</script>
+
+<script>
+// ================= DONNÉES DES BOUTIQUES =================
+const SHOPS = [
+  // --- ZONE CENTRE (parcours à pied, ordre suggéré) ---
+  {id:1, name:"Montres SA", address:"Rue du Mont-Blanc 6", lat:46.2074509, lng:6.1472609, phone:"+41 22 731 41 30", notes:"Généraliste multi-marques, bon accueil touristes", zone:"centre", order:1},
+  {id:2, name:"Pastore-Nicolet", address:"Rue du Mont-Blanc 7", lat:46.2077348, lng:6.1459927, phone:"+41 22 732 26 68", notes:"Famille ouverte à la discussion", zone:"centre", order:2},
+  {id:3, name:"Association Montres et Bijoux", address:"Rue du Mont-Blanc 7", lat:46.2077348, lng:6.1459927, phone:"+41 22 906 77 66", notes:"Peu d'infos, à vérifier sur place", zone:"centre", order:3},
+  {id:4, name:"Harold W.", address:"Rue du Mont-Blanc 20", lat:46.2088211, lng:6.1444645, phone:"+41 22 738 92 10", notes:"Achat/vente/restauration, Seiko + occasion", zone:"centre", order:4},
+  {id:5, name:"Helvetic Corner", address:"Rue du Mont-Blanc 15", lat:46.208757, lng:6.1440251, phone:"+41 22 900 06 54", notes:"Petite boutique familiale", zone:"centre", order:5},
+  {id:6, name:"Antiquorum Genève", address:"Rue du Mont-Blanc 3", lat:46.207247, lng:6.14676, phone:"+41 22 909 28 50", notes:"Maison d'enchères, attention avis négatif (objets volés signalés)", zone:"centre", order:6},
+  {id:7, name:"Gold Service Genève", address:"Rue du Mont-Blanc 11", lat:46.2083711, lng:6.1446618, phone:"+41 22 732 65 45", notes:"Achat or/montres, avis mitigés", zone:"centre", order:7},
+  {id:8, name:"Swiss Time", address:"Rue Ami-Lévrier 11", lat:46.2088018, lng:6.1465938, phone:"+41 78 728 59 66", notes:"Petite boutique familiale", zone:"centre", order:8},
+  {id:9, name:"Swatch Rue du Mont-Blanc", address:"Rue du Mont-Blanc 19", lat:46.2090511, lng:6.1436731, phone:null, notes:"Marque officielle", zone:"centre", order:9},
+  {id:10, name:"La Maison de l'Horlogerie", address:"Rue du Cendrier 24", lat:46.2074776, lng:6.1454699, phone:"+41 22 732 09 54", notes:"Vintage, patron Allen très sympa", zone:"centre", order:10},
+  {id:11, name:"Atelier Xhevdet Rexhepi", address:"Rue François-Bonivard 12", lat:46.2084883, lng:6.1475084, phone:null, notes:"Jeune horloger indépendant", zone:"centre", order:11},
+  {id:12, name:"Bracelet Workshop", address:"Rue Sigismond-Thalberg 8", lat:46.2097595, lng:6.1468383, phone:"+41 22 344 24 24", notes:"Bracelets sur-mesure haut de gamme", zone:"centre", order:12},
+  {id:13, name:"Silver House Bijoux", address:"Rue de Chantepoulet 13", lat:46.2080123, lng:6.1439243, phone:"+41 22 732 04 56", notes:"Bijouterie/réparation", zone:"centre", order:13},
+  {id:14, name:"Swiss Souvenirs CONSUL", address:"Rue de Chantepoulet 9", lat:46.2080342, lng:6.1444085, phone:"+41 22 738 18 33", notes:"Boutique touristique avec montres, patronne réputée pour négocier", zone:"centre", order:14},
+  {id:15, name:"Babich", address:"Rue De-Grenus 10", lat:46.2065727, lng:6.1425808, phone:"+41 22 731 57 47", notes:"Accessible, service rapide", zone:"centre", order:15},
+  {id:16, name:"41Watch Geneva", address:"Pl. De-Grenus 4", lat:46.2065925, lng:6.1435782, phone:"+41 22 901 11 71", notes:"Sur rdv uniquement", zone:"centre", order:16},
+  {id:17, name:"Atelier des Bergues", address:"Rue Rousseau 1", lat:46.206517, lng:6.144251, phone:"+41 22 732 02 34", notes:"Seul revendeur Charriol, réparation aussi", zone:"centre", order:17},
+  {id:18, name:"Breitling Boutique", address:"Place des Bergues 1", lat:46.2069468, lng:6.146053, phone:"+41 22 738 16 00", notes:"Marque officielle, ambiance conviviale", zone:"centre", order:18},
+  {id:19, name:"Bijouterie Kunz", address:"Quai des Bergues 23", lat:46.2064138, lng:6.1450952, phone:"+41 22 731 09 20", notes:"Multi-marques (Tudor, Zenith, TAG Heuer...)", zone:"centre", order:19},
+  {id:20, name:"Bijouterie Moya", address:"Rue Kléberg 25", lat:46.2073606, lng:6.1456681, phone:"+41 22 732 83 80", notes:"Petite boutique familiale, accueil chaleureux", zone:"centre", order:20},
+  {id:21, name:"Achat or by Valorum", address:"Rue Kléberg 12", lat:46.2071745, lng:6.1459068, phone:"+41 22 525 38 20", notes:"Multilingue, bonne réputation", zone:"centre", order:21},
+  {id:22, name:"Fast Cash", address:"Rue de Monthoux 27", lat:46.210623, lng:6.1477905, phone:"+41 22 731 16 63", notes:"Rachat multi-objets", zone:"centre", order:22},
+  {id:23, name:"Orstar", address:"Rue de Berne 13", lat:46.2093268, lng:6.1450075, phone:"+41 22 901 10 00", notes:"Avis négatif sur l'accueil", zone:"centre", order:23},
+  {id:24, name:"CONSUL 1, Horlogerie & Bijouterie", address:"Rue de Lausanne 26", lat:46.2121197, lng:6.1450385, phone:"+41 22 741 10 05", notes:"Petit commerce, bon contact, vintage", zone:"centre", order:24},
+  {id:25, name:"Achat d'or Rive droite", address:"Rue de Lausanne 36", lat:46.2130817, lng:6.1455136, phone:"+41 22 363 18 18", notes:"Achat or", zone:"centre", order:25},
+  {id:26, name:"ACHATDOr (Bd James-Fazy)", address:"Bd James-Fazy 12", lat:46.2077435, lng:6.1406192, phone:"+41 22 732 24 24", notes:"Achat or/montres", zone:"centre", order:26},
+  {id:27, name:"THE SWISS COLLECTOR (Bd James-Fazy)", address:"Bd James-Fazy 12", lat:46.2077409, lng:6.1406198, phone:"+41 22 362 01 01", notes:"2e adresse du même groupe", zone:"centre", order:27},
+  {id:28, name:"Radiant, bijouterie éthique", address:"Rue de la Corraterie 14", lat:46.2031023, lng:6.1430623, phone:"+41 22 310 49 53", notes:"Bijoux éthiques, ambiance sympa", zone:"centre", order:28},
+  {id:29, name:"THE SWISS COLLECTOR (Confédération)", address:"Rue de la Confédération 3", lat:46.2038969, lng:6.1442209, phone:"+41 22 362 01 01", notes:"Négo mentionnée, bons prix rapportés", zone:"centre", order:29},
+  {id:30, name:"KURZ Bader", address:"Rue de la Confédération 11", lat:46.2037477, lng:6.1449778, phone:"+41 22 311 70 76", notes:"Très bien noté, service rapide", zone:"centre", order:30},
+  {id:31, name:"Achat d'or Confédération Centre", address:"Rue de la Confédération 5", lat:46.2039431, lng:6.1441402, phone:"+41 22 810 47 47", notes:"Achat or/montres", zone:"centre", order:31},
+  {id:32, name:"Christ Montres & Bijoux", address:"Rue du Commerce 5", lat:46.2041677, lng:6.1451626, phone:"+41 22 312 07 36", notes:"Généraliste", zone:"centre", order:32},
+  {id:33, name:"Chronométrie Clarence", address:"Rue du Marché 3", lat:46.2034801, lng:6.146159, phone:"+41 22 311 31 69", notes:"Marques italiennes, négo possible", zone:"centre", order:33},
+  {id:34, name:"Swatch Rue du Marché", address:"Rue du Marché 40", lat:46.2029127, lng:6.1473163, phone:null, notes:"Marque officielle", zone:"centre", order:34},
+  {id:35, name:"Watchfinder & Co.", address:"Rue du Marché 34", lat:46.2029829, lng:6.1471746, phone:"+41 58 330 33 30", notes:"Occasion haut de gamme (groupe Richemont)", zone:"centre", order:35},
+  {id:36, name:"Bijouterie Séverine Ponti", address:"Rue Neuve-du-Molard 19", lat:46.2033203, lng:6.1494267, phone:"+41 22 810 83 25", notes:"Avis mitigés sur l'accueil", zone:"centre", order:36},
+  {id:37, name:"ArtyA Watches Boutique", address:"Rue Neuve-du-Molard 22", lat:46.2031994, lng:6.1494649, phone:"+41 22 752 49 40", notes:"Marque de niche, horaires réduits", zone:"centre", order:37},
+  {id:38, name:"K2 Luxury Watches", address:"Pl. du Molard 5", lat:46.203614, lng:6.1481455, phone:"+41 79 871 25 10", notes:"Négo par email/whatsapp", zone:"centre", order:38},
+  {id:39, name:"Salon des Horlogers", address:"Pl. du Molard 5", lat:46.2036137, lng:6.148145, phone:"+41 79 871 25 10", notes:"Concept 'salon', marques indépendantes, très bien noté", zone:"centre", order:39},
+  {id:40, name:"Le Lounge Roger Dubuis", address:"Pl. du Molard 3", lat:46.2037528, lng:6.1482921, phone:"+41 22 321 28 28", notes:"Marque officielle", zone:"centre", order:40},
+  {id:41, name:"Boutique F.P.Journe", address:"Pl. de Longemalle 13", lat:46.2030576, lng:6.1503836, phone:"+41 22 810 33 33", notes:"Très haut de gamme, sur rdv, porte fermée sans rdv d'après avis", zone:"centre", order:41},
+  {id:42, name:"ICONEEK", address:"Pl. de Longemalle 19", lat:46.2027117, lng:6.1501092, phone:"+41 22 310 39 07", notes:"Maison de vente aux enchères", zone:"centre", order:42},
+  {id:43, name:"Guichard Collection", address:"Rue du Rhône 8", lat:46.2040318, lng:6.1448504, phone:"+41 79 725 19 99", notes:"Troc/reprise mentionnée, très bien noté", zone:"centre", order:43},
+  {id:44, name:"Royal Swiss Montres et Bijoux", address:"Rue du Rhône 23", lat:46.2044602, lng:6.1469644, phone:"+41 22 818 00 00", notes:"Peu d'avis", zone:"centre", order:44},
+  {id:45, name:"Jahan Jewellery", address:"Rue du Rhône 25", lat:46.2043996, lng:6.147139, phone:"+41 22 810 20 20", notes:"Joaillerie sur-mesure", zone:"centre", order:45},
+  {id:46, name:"Chopard Boutique", address:"Rue du Rhône 27", lat:46.2043529, lng:6.147046, phone:"+41 22 310 70 50", notes:"Marque officielle", zone:"centre", order:46},
+  {id:47, name:"OMEGA Geneva Store", address:"Rue du Rhône 31", lat:46.204262, lng:6.1479063, phone:"+41 22 319 25 50", notes:"Marque officielle", zone:"centre", order:47},
+  {id:48, name:"Cartier", address:"Rue du Rhône 35", lat:46.2040486, lng:6.1488742, phone:"+41 22 818 54 54", notes:"Marque officielle", zone:"centre", order:48},
+  {id:49, name:"Bucherer", address:"Rue du Rhône 45", lat:46.2038321, lng:6.1499564, phone:"+41 22 319 62 66", notes:"Multi-marques, gros volume", zone:"centre", order:49},
+  {id:50, name:"Piaget Boutique", address:"Rue du Rhône 40", lat:46.2042202, lng:6.1467042, phone:"+41 22 817 02 00", notes:"Marque officielle", zone:"centre", order:50},
+  {id:51, name:"Breguet Boutique", address:"Rue du Rhône 40", lat:46.2043475, lng:6.1463996, phone:"+41 22 317 49 20", notes:"Marque officielle", zone:"centre", order:51},
+  {id:52, name:"Blancpain Boutique", address:"Rue du Rhône 40", lat:46.2043618, lng:6.1464002, phone:"+41 22 312 59 39", notes:"Marque officielle", zone:"centre", order:52},
+  {id:53, name:"Jaeger-LeCoultre", address:"Rue du Rhône 56", lat:46.2040486, lng:6.1477843, phone:"+41 22 310 61 50", notes:"Marque officielle", zone:"centre", order:53},
+  {id:54, name:"Gübelin", address:"Rue du Rhône 60", lat:46.2038722, lng:6.1484293, phone:"+41 22 365 53 80", notes:"Haut de gamme", zone:"centre", order:54},
+  {id:55, name:"Divan Luxury Goods", address:"Rue du Rhône 49", lat:46.2035079, lng:6.1510046, phone:"+41 22 400 08 08", notes:"Concept store montres/art/bijoux", zone:"centre", order:55},
+  {id:56, name:"Orfelis", address:"Rue du Rhône 114", lat:46.202634, lng:6.154126, phone:"+41 22 786 20 86", notes:"Bijouterie", zone:"centre", order:56},
+  {id:57, name:"Van Der Bauwede", address:"Rue de la Tour-Maîtresse 3", lat:46.202691, lng:6.1518288, phone:"+41 22 312 03 44", notes:"Bijouterie-horlogerie", zone:"centre", order:57},
+  {id:58, name:"Roy & Sacha Davidoff", address:"Rue Verdaine 16", lat:46.201183, lng:6.149883, phone:"+41 22 810 19 83", notes:"No-nonsense, ouvert à la négo", zone:"centre", order:58},
+  {id:59, name:"Boutique Rolex Genève", address:"Rue de la Fontaine 3", lat:46.2021866, lng:6.1498788, phone:"+41 22 302 44 44", notes:"Marque officielle", zone:"centre", order:59},
+  {id:60, name:"Ponti Collection", address:"Rue du Puits-Saint-Pierre 2", lat:46.2016703, lng:6.147237, phone:"+41 22 310 18 00", notes:"Négo possible mais avis mitigés", zone:"centre", order:60},
+  {id:61, name:"PATEK PHILIPPE Salon", address:"Rue du Rhône 41", lat:46.203851, lng:6.1495232, phone:"+41 22 707 30 50", notes:"Marque officielle, très select", zone:"centre", order:61},
+  {id:62, name:"Atelier Des Doct'Heures", address:"Grand-Rue 17", lat:46.2020795, lng:6.1455554, phone:"+41 78 668 34 94", notes:"Atelier vintage, Fabiano très recommandé", zone:"centre", order:62},
+  {id:63, name:"Initium", address:"Grand-Rue 17", lat:46.2020951, lng:6.1455867, phone:"+41 22 810 85 13", notes:"Cours d'horlogerie, pas de vente directe", zone:"centre", order:63},
+  {id:64, name:"L'Atelier Horloger", address:"Rue Chausse-Coq 16", lat:46.1996872, lng:6.1490708, phone:"+41 76 401 54 81", notes:"Réparation multilingue", zone:"centre", order:64},
+  {id:65, name:"THE WATCH LAB GENEVE", address:"Pl. du Bourg-de-Four 36", lat:46.199805, lng:6.148206, phone:"+41 22 335 15 01", notes:"Réparation/restauration réputée", zone:"centre", order:65},
+  {id:66, name:"Horlogerie Desbiolles", address:"Bd du Théâtre 7", lat:46.2023304, lng:6.1420194, phone:"+41 22 310 37 89", notes:"Indépendant, vintage", zone:"centre", order:66},
+  {id:67, name:"Ultraco S.A.", address:"Rue du Stand 56", lat:46.2035013, lng:6.1404976, phone:null, notes:"Spécialiste vintage Cartier/Corum, 5 générations", zone:"centre", order:67},
+  {id:68, name:"Blackout Watches", address:"Rue de la Cité 29", lat:46.2026162, lng:6.1444688, phone:"+41 22 310 00 01", notes:"Marque indépendante montante", zone:"centre", order:68},
+  {id:69, name:"L'écrin Horlogerie Genève", address:"Rue François-Versonnex 7", lat:46.2032229, lng:6.1551795, phone:"+41 78 826 41 21", notes:"Haut de gamme sur rdv", zone:"centre", order:69},
+  {id:70, name:"La Petite Trotteuse", address:"Av. de Frontenex 2", lat:46.2017596, lng:6.1562586, phone:"+41 22 736 02 03", notes:"Horloger réparateur", zone:"centre", order:70},
+  {id:71, name:"Timetation", address:"Rue Muzy 13", lat:46.2036355, lng:6.1566679, phone:null, notes:"Vente en ligne + boutique", zone:"centre", order:71},
+  {id:72, name:"Watchmakers United", address:"Rue Pierre-Fatio 5", lat:46.203568, lng:6.1543191, phone:"+41 22 700 08 94", notes:"Marques indépendantes", zone:"centre", order:72},
+  {id:73, name:"MTW Genève", address:"Rue des Eaux-Vives 94", lat:46.20537, lng:6.1607107, phone:"+41 79 121 19 00", notes:"Sur rdv uniquement", zone:"centre", order:73},
+  {id:74, name:"OR24 Montres & Bijoux", address:"Bd Helvétique 28", lat:46.201078, lng:6.1547499, phone:"+41 22 900 28 28", notes:"Achat/vente or & montres", zone:"centre", order:74},
+  {id:75, name:"ACHATDOR (Pictet-de-Rochemont)", address:"Av. Pictet-de-Rochemont 5", lat:46.2025817, lng:6.1573536, phone:"+41 22 740 55 55", notes:"Achat/vente or, avis mitigés", zone:"centre", order:75},
+  {id:76, name:"THE SWISS COLLECTOR (Pictet-de-Rochemont)", address:"Av. Pictet-de-Rochemont 5", lat:46.2025817, lng:6.1573536, phone:"+41 22 362 01 01", notes:"3e adresse du même groupe", zone:"centre", order:76},
+  {id:77, name:"Golden Cash Sàrl", address:"Rue du 31 Décembre 15", lat:46.2046065, lng:6.1587512, phone:"+41 22 347 00 00", notes:"Rachat or/montres", zone:"centre", order:77},
+  {id:78, name:"Bijouterie Vert-de-Gris", address:"Rue de Montchoisy 18", lat:46.2032699, lng:6.1606336, phone:"+41 22 736 77 50", notes:"Réparation/création bijoux, pas spécialisé montres", zone:"centre", order:78},
+
+  // --- ZONE EXTENSION (nécessite transport, pas dans le tracé à pied) ---
+  {id:79, name:"Bijouterie Au Triangle D'or", address:"Rue de la Servette 74", lat:46.2123179, lng:6.1329815, phone:null, notes:"Familial, quartier Servette", zone:"extension"},
+  {id:80, name:"L'Art du Temps", address:"Rue Saint-Joseph 3, Carouge", lat:46.1867657, lng:6.1408606, phone:"+41 22 343 21 24", notes:"Réparation, passionné", zone:"extension"},
+  {id:81, name:"WATCHASER", address:"Rue Saint-Victor 2, Carouge", lat:46.1863236, lng:6.1398213, phone:"+41 76 233 16 60", notes:"Vente/achat, un litige signalé", zone:"extension"},
+  {id:82, name:"Watch-Stego", address:"Rte des Jeunes 5D, Acacias", lat:46.1914233, lng:6.1285155, phone:"+41 78 907 65 68", notes:"Réparation 30 ans d'expérience", zone:"extension"},
+  {id:83, name:"Mylor Carouge", address:"Av. Cardinal-Mermillod 36, Carouge", lat:46.1854047, lng:6.1435981, phone:"+41 22 301 56 16", notes:"Bijouterie généraliste", zone:"extension"},
+  {id:84, name:"D.W&Co SARL", address:"Chem. de la Marbrerie 5", lat:46.1797749, lng:6.1353803, phone:"+41 78 737 21 04", notes:"Réparation multi-marques", zone:"extension"},
+  {id:85, name:"Cash For You sa", address:"Rue de Carouge 21", lat:46.1959361, lng:6.1434402, phone:"+41 22 321 40 00", notes:"Rachat multi-objets, pas que montres", zone:"extension"},
+  {id:86, name:"Intemporel Genève", address:"Rte des Jeunes 4bis, Acacias", lat:46.1903398, lng:6.1271914, phone:"+41 22 756 01 56", notes:"Revendeur Rolex d'occasion", zone:"extension"},
+  {id:87, name:"HopCash Voltaire", address:"Rue Voltaire 14", lat:46.2078748, lng:6.1377143, phone:"+41 22 344 95 85", notes:"Dépôt-vente généraliste", zone:"extension"},
+  {id:88, name:"HopCash Plainpalais", address:"Rue de Carouge 18", lat:46.1962489, lng:6.1430284, phone:"+41 22 800 12 65", notes:"Dépôt-vente, bijoux/montres", zone:"extension"},
+  {id:89, name:"Watch Repair", address:"Chem. des Mouilles 16, Petit-Lancy", lat:46.185264, lng:6.110054, phone:"+41 78 860 34 70", notes:"Réparation, un peu excentré", zone:"extension"},
+  {id:90, name:"Horlogerie A l'Heure Vive", address:"Rue de la Puiserande 9", lat:46.2016560, lng:6.131526, phone:"+41 22 329 23 82", notes:"Familial, ouvert dimanche", zone:"extension"},
+  {id:91, name:"Hour Passion Aéroport", address:"Genève Aéroport", lat:46.2308771, lng:6.1081414, phone:"+41 22 817 48 37", notes:"Côté départs, multi-marques", zone:"extension"},
+  {id:92, name:"Boutique Rolex-Bucherer Aéroport", address:"Genève Aéroport", lat:46.2308293, lng:6.1078444, phone:"+41 22 732 72 16", notes:"Côté départs", zone:"extension"},
+  {id:93, name:"Swatch Airport Airside", address:"Genève Aéroport", lat:46.2312856, lng:6.1102265, phone:null, notes:"Côté départs, après contrôle", zone:"extension"},
+  {id:94, name:"Manor Aéroport", address:"Genève Aéroport", lat:46.2331044, lng:6.1129285, phone:"+41 22 909 47 94", notes:"Rayon montres généraliste", zone:"extension"},
+  {id:95, name:"Chrono Privé", address:"Av. Krieg 7c (sur rdv)", lat:46.1950217, lng:6.1634652, phone:null, notes:"Vente en ligne / sur rendez-vous uniquement", zone:"extension"}
+];
+
+// ================= ETAT =================
+let visitedState = {}; // {id: true/false}
+
+function shopKey(id){ return "shop_" + id; }
+
+// ================= FIREBASE SYNC =================
+function listenToVisited(){
+  if(!db){
+    // fallback localStorage (pas de synchro entre viewers)
+    const saved = localStorage.getItem("visitedState");
+    visitedState = saved ? JSON.parse(saved) : {};
+    renderAll();
+    return;
+  }
+  db.ref("visited").on("value", snap => {
+    visitedState = snap.val() || {};
+    renderAll();
+  });
+}
+
+function setVisited(id, val){
+  if(db && !isAdmin){
+    return; // silencieux : rien ne se passe pour un non-admin
+  }
+  visitedState[id] = val;
+  if(db){
+    db.ref("visited/" + id).set(val);
+  } else {
+    localStorage.setItem("visitedState", JSON.stringify(visitedState));
+    renderAll();
+  }
+}
+
+function resetAll(){
+  if(db && !isAdmin){
+    return; // silencieux
+  }
+  if(!confirm("Réinitialiser toute la checklist pour TOUT LE MONDE ?")) return;
+  visitedState = {};
+  if(db){
+    db.ref("visited").set({});
+  } else {
+    localStorage.removeItem("visitedState");
+    renderAll();
+  }
+}
+
+// ================= AUTH ADMIN (accès caché) =================
+// Raccourci clavier discret pour ouvrir la connexion : Ctrl + Shift + G
+// (aucun bouton visible, personne d'autre que toi ne connaît la combinaison)
+function updateAdminUI(){
+  renderAll();
+}
+
+if(auth){
+  auth.onAuthStateChanged(user => {
+    isAdmin = !!(user && user.uid === ADMIN_UID);
+    updateAdminUI();
+  });
+}
+
+document.addEventListener('keydown', (e) => {
+  if(e.ctrlKey && e.shiftKey && e.key === 'G'){
+    document.getElementById('loginModal').style.display = 'flex';
+  }
+});
+
+// Accès mobile : 5 taps rapides sur le titre en haut de page (moins de 2s au total)
+let tapCount = 0;
+let tapTimer = null;
+document.querySelector('header h1')?.addEventListener('click', () => {
+  tapCount++;
+  clearTimeout(tapTimer);
+  tapTimer = setTimeout(() => { tapCount = 0; }, 2000);
+  if(tapCount >= 5){
+    tapCount = 0;
+    document.getElementById('loginModal').style.display = 'flex';
+  }
+});
+document.getElementById('cancelLoginBtn')?.addEventListener('click', () => {
+  document.getElementById('loginModal').style.display = 'none';
+});
+document.getElementById('doLoginBtn')?.addEventListener('click', () => {
+  const email = document.getElementById('loginEmail').value;
+  const pass = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if(!auth){ errEl.textContent = "Firebase non configuré."; return; }
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(() => { document.getElementById('loginModal').style.display = 'none'; })
+    .catch(e => { errEl.textContent = "Identifiants incorrects."; });
+});
+
+// ================= CARTE =================
+const map = L.map('map', {zoomControl:false}).setView([46.2044, 6.1460], 15);
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '© OpenStreetMap'
+}).addTo(map);
+
+let markers = {};
+let routeLine = null;
+
+function makeIcon(shop, visited){
+  const cls = visited ? "num-icon visited" : (shop.zone === "extension" ? "num-icon ext" : "num-icon");
+  const label = shop.zone === "centre" ? shop.order : "★";
+  return L.divIcon({
+    className: '',
+    html: `<div class="${cls}">${label}</div>`,
+    iconSize: [26,26]
+  });
+}
+
+function wazeLink(lat,lng){ return `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`; }
+function gmapsLink(lat,lng){ return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`; }
+
+function popupHtml(shop){
+  const visited = !!visitedState[shop.id];
+  return `
+    <div class="popup-title">${shop.name}</div>
+    <div class="popup-badge">${shop.zone === 'centre' ? '#' + shop.order + ' · centre-ville' : '★ extension (transport)'}</div>
+    <div class="popup-addr">${shop.address}${shop.phone ? ' · ' + shop.phone : ''}</div>
+    <div class="popup-notes">${shop.notes}</div>
+    <div class="popup-btns">
+      <a class="btn-waze" href="${wazeLink(shop.lat, shop.lng)}" target="_blank">🚗 Itinéraire Waze</a>
+      <a class="btn-gmaps" href="${gmapsLink(shop.lat, shop.lng)}" target="_blank">📍 Itinéraire Google Maps</a>
+      <button class="btn-visited ${visited ? 'done' : ''}" onclick="toggleVisited(${shop.id})">
+        ${visited ? '✅ Visité (cliquer pour annuler)' : '☐ Marquer comme visité'}
+      </button>
+    </div>
+  `;
+}
+
+function toggleVisited(id){
+  setVisited(id, !visitedState[id]);
+}
+window.toggleVisited = toggleVisited;
+
+function renderAll(){
+  const zoneFilter = document.getElementById('filterZone').value;
+  const statusFilter = document.getElementById('filterStatus').value;
+
+  // markers
+  SHOPS.forEach(shop => {
+    const visited = !!visitedState[shop.id];
+    let show = true;
+    if(zoneFilter !== 'all' && shop.zone !== zoneFilter) show = false;
+    if(statusFilter === 'todo' && visited) show = false;
+    if(statusFilter === 'done' && !visited) show = false;
+
+    if(markers[shop.id]){
+      map.removeLayer(markers[shop.id]);
+      delete markers[shop.id];
+    }
+    if(show){
+      const m = L.marker([shop.lat, shop.lng], {icon: makeIcon(shop, visited)}).addTo(map);
+      m.bindPopup(popupHtml(shop));
+      markers[shop.id] = m;
+    }
+  });
+
+  // route line (zone centre uniquement, triée par order)
+  if(routeLine){ map.removeLayer(routeLine); }
+  if(zoneFilter === 'all' || zoneFilter === 'centre'){
+    const centreShops = SHOPS.filter(s => s.zone === 'centre').sort((a,b)=>a.order-b.order);
+    const coords = centreShops.map(s => [s.lat, s.lng]);
+    routeLine = L.polyline(coords, {color:'#00cc44', weight:2, opacity:0.5, dashArray:'6,6'}).addTo(map);
+  }
+
+  // stats
+  const total = SHOPS.length;
+  const done = SHOPS.filter(s => visitedState[s.id]).length;
+  const centreTotal = SHOPS.filter(s=>s.zone==='centre').length;
+  const centreDone = SHOPS.filter(s=>s.zone==='centre' && visitedState[s.id]).length;
+  document.getElementById('stats').innerHTML = `<b>${done}/${total}</b> visitées · centre-ville : <b>${centreDone}/${centreTotal}</b>`;
+  document.getElementById('progressBar').style.width = (total ? (done/total*100) : 0) + '%';
+}
+
+// ================= UI =================
+document.getElementById('filterZone').addEventListener('change', renderAll);
+document.getElementById('filterStatus').addEventListener('change', renderAll);
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+listenToVisited();
+</script>
+
+<!--
+============================================================
+ INSTRUCTIONS DE MISE EN PLACE (à lire une seule fois)
+============================================================
+
+1) Crée un projet Firebase gratuit :
+   -> https://console.firebase.google.com/ -> "Ajouter un projet"
+   -> Une fois créé, va dans "Créer une base de données" -> "Realtime Database"
+   -> Choisis "Démarrer en mode TEST" pour l'instant (on verrouille les règles à l'étape 5)
+
+2) Dans les paramètres du projet (roue crantée en haut à gauche) -> "Paramètres du projet"
+   -> section "Vos applications" -> "Ajouter une application" -> Web (icône </>)
+   -> Copie les valeurs "apiKey" et "databaseURL" (et "projectId")
+   -> Remplace REPLACE_ME dans le bloc <script> "firebaseConfig" plus haut par tes vraies valeurs.
+
+3) Active l'authentification admin (pour être le SEUL à pouvoir valider une boutique) :
+   -> Dans la console Firebase : "Authentication" -> "Get started"
+   -> Onglet "Sign-in method" -> active "Email/Password"
+   -> Onglet "Users" -> "Add user" -> mets TON email + un mot de passe à toi
+   -> Une fois créé, copie l'UID affiché à côté de ton compte
+   -> Remplace ADMIN_UID = "REPLACE_ME_ADMIN_UID" plus haut par cet UID
+   -> Pour te connecter sur le site une fois déployé, deux façons d'ouvrir la fenêtre
+      de connexion (aucun bouton visible, pour ne pas attirer l'attention) :
+        - Sur mobile : taper 5 fois rapidement (moins de 2s) sur le titre "🕰️ Tour des
+          Montres — Genève" en haut de la page
+        - Sur ordinateur : Ctrl+Shift+G
+      Une fois connecté, Firebase te garde identifié automatiquement sur ce navigateur/
+      téléphone (pas besoin de refaire le tap à chaque fois). Note que ce n'est qu'une
+      protection d'interface : la vraie sécurité vient des règles Firebase à l'étape 4,
+      qui bloquent l'écriture côté serveur même si quelqu'un lit le code source et
+      trouve le mécanisme ou appelle les fonctions JS directement.
+
+4) Verrouille les règles de la Realtime Database (onglet "Règles" dans Realtime Database) :
+   {
+     "rules": {
+       "visited": {
+         ".read": true,
+         ".write": "auth != null && auth.uid === 'COLLE_TON_UID_ICI'"
+       }
+     }
+   }
+   -> Ça permet à TOUT LE MONDE de voir la progression en live,
+      mais SEUL toi (connecté via le bouton 🔑 Connexion admin sur le site)
+      peux cocher/décocher une boutique visitée.
+
+5) Push ce fichier sur ton repo GitHub Pages (ex: montres.posty78.fr ou un sous-dossier)
+
+Sans étape 1-4, le site fonctionne quand même mais en LOCAL uniquement (pas de
+synchro entre viewers, pas d'admin) grâce au fallback localStorage.
+============================================================
+-->
+</body>
+</html>
