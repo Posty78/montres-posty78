@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tour des Montres - Genève | Posty78</title>
+<title>Paris - Genève en autostop, sans argent, en live 24/7 !</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root{
@@ -85,12 +85,21 @@
     line-height:1.6;
   }
   #legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;}
+
+  @keyframes pulse-red{
+    0%{ stroke-opacity:1; fill-opacity:0.35; }
+    50%{ stroke-opacity:.4; fill-opacity:0.1; }
+    100%{ stroke-opacity:1; fill-opacity:0.35; }
+  }
+  .pulse-highlight{
+    animation: pulse-red 1s ease-in-out infinite;
+  }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <h1>🕰️ Tour des Montres — Genève</h1>
+    <h1>Paris - Genève en autostop, sans argent, en live 24/7 !</h1>
     <div class="stats" id="stats">Chargement…</div>
   </header>
   <div id="progressBarWrap"><div id="progressBar"></div></div>
@@ -101,6 +110,8 @@
     <div><span style="background:#555"></span>Déjà visité</div>
   </div>
   <div class="controls">
+    <input type="number" id="searchId" min="1" max="95" placeholder="N° boutique (1-95)" style="width:130px;">
+    <button id="searchBtn" class="primary">🔍 Localiser</button>
     <select id="filterZone">
       <option value="all">Toutes les zones</option>
       <option value="centre">Centre-ville seulement</option>
@@ -442,6 +453,52 @@ function renderAll(){
 document.getElementById('filterZone').addEventListener('change', renderAll);
 document.getElementById('filterStatus').addEventListener('change', renderAll);
 document.getElementById('resetBtn').addEventListener('click', resetAll);
+
+// ================= RECHERCHE PAR NUMÉRO =================
+let highlightLayer = null;
+let highlightTimer = null;
+
+function locateShop(){
+  const val = parseInt(document.getElementById('searchId').value, 10);
+  if(!val){ return; }
+  const shop = SHOPS.find(s => s.id === val);
+  if(!shop){
+    alert("Pas de boutique n°" + val + ". Les numéros vont de 1 à " + SHOPS.length + ".");
+    return;
+  }
+
+  // s'assurer que le filtre de zone n'empêche pas l'affichage
+  document.getElementById('filterZone').value = 'all';
+  document.getElementById('filterStatus').value = 'all';
+  renderAll();
+
+  map.setView([shop.lat, shop.lng], 18, {animate:true});
+
+  if(highlightLayer){ map.removeLayer(highlightLayer); }
+  if(highlightTimer){ clearTimeout(highlightTimer); }
+
+  highlightLayer = L.circleMarker([shop.lat, shop.lng], {
+    radius: 22,
+    color: '#ff0000',
+    weight: 4,
+    fillColor: '#ff0000',
+    fillOpacity: 0.25,
+    className: 'pulse-highlight'
+  }).addTo(map);
+
+  if(markers[shop.id]){
+    markers[shop.id].openPopup();
+  }
+
+  highlightTimer = setTimeout(() => {
+    if(highlightLayer){ map.removeLayer(highlightLayer); highlightLayer = null; }
+  }, 8000);
+}
+
+document.getElementById('searchBtn').addEventListener('click', locateShop);
+document.getElementById('searchId').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ locateShop(); }
+});
 
 listenToVisited();
 </script>
