@@ -39,11 +39,11 @@
     height:100%;background:var(--green);width:0%;transition:width .3s;
   }
 
-  #map{flex:1;min-height:0;}
+  #map{flex:1;min-height:0;position:relative;}
 
   .controls{
     display:flex;gap:8px;padding:8px 12px;background:var(--panel);flex-wrap:wrap;
-    border-top:1px solid #2a2f36;
+    border-top:1px solid #2a2f36;position:relative;z-index:800;
   }
   select,button{
     background:#2a2f36;color:var(--text);border:1px solid #3a4048;
@@ -80,11 +80,20 @@
   .num-icon.ext{background:#ffb020;color:#331b00;}
 
   #legend{
-    position:absolute;bottom:70px;left:10px;background:rgba(20,24,28,.9);
+    position:absolute;top:10px;left:10px;background:rgba(20,24,28,.9);
     padding:8px 10px;border-radius:8px;font-size:11px;color:var(--muted);z-index:500;
     line-height:1.6;
   }
   #legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;}
+
+  .leaflet-control-attribution{
+    font-size:9px !important;
+    background:rgba(20,24,28,.5) !important;
+    color:#8a8f94 !important;
+    padding:1px 4px !important;
+    opacity:.6;
+  }
+  .leaflet-control-attribution a{ color:#8a8f94 !important; }
 
   @keyframes pulse-red{
     0%{ stroke-opacity:1; fill-opacity:0.35; }
@@ -364,8 +373,9 @@ document.getElementById('doLoginBtn')?.addEventListener('click', () => {
 });
 
 // ================= CARTE =================
-const map = L.map('map', {zoomControl:false}).setView([46.2044, 6.1460], 15);
+const map = L.map('map', {zoomControl:false, attributionControl:false}).setView([46.2044, 6.1460], 15);
 L.control.zoom({position:'bottomright'}).addTo(map);
+L.control.attribution({prefix:false, position:'bottomright'}).addTo(map);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '© OpenStreetMap'
