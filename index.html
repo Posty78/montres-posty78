@@ -85,6 +85,9 @@
     padding:6px 12px;font-size:11px;color:var(--muted);
     display:flex;gap:14px;flex-wrap:wrap;
     border-bottom:1px solid #2a2f36;
+    user-select:none;-webkit-user-select:none;-moz-user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
   }
   #legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;}
 
@@ -370,11 +373,12 @@ function cancelResetHold(){
   clearTimeout(resetHoldTimer);
 }
 legendEl?.addEventListener('mousedown', startResetHold);
-legendEl?.addEventListener('touchstart', startResetHold, {passive:true});
+legendEl?.addEventListener('touchstart', (e) => { e.preventDefault(); startResetHold(); }, {passive:false});
 legendEl?.addEventListener('mouseup', cancelResetHold);
 legendEl?.addEventListener('mouseleave', cancelResetHold);
 legendEl?.addEventListener('touchend', cancelResetHold);
 legendEl?.addEventListener('touchcancel', cancelResetHold);
+legendEl?.addEventListener('contextmenu', (e) => e.preventDefault());
 document.getElementById('cancelLoginBtn')?.addEventListener('click', () => {
   document.getElementById('loginModal').style.display = 'none';
 });
