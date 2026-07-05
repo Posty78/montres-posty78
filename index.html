@@ -133,7 +133,6 @@
       <option value="todo">À faire</option>
       <option value="done">Visitées</option>
     </select>
-    <button id="resetBtn">🔄 Réinitialiser toute la checklist</button>
   </div>
 </div>
 
@@ -360,6 +359,19 @@ document.querySelector('header h1')?.addEventListener('click', () => {
     document.getElementById('loginModal').style.display = 'flex';
   }
 });
+
+// Reset caché : 10 taps rapides sur la barre de progression (moins de 3s au total)
+let resetTapCount = 0;
+let resetTapTimer = null;
+document.getElementById('progressBarWrap')?.addEventListener('click', () => {
+  resetTapCount++;
+  clearTimeout(resetTapTimer);
+  resetTapTimer = setTimeout(() => { resetTapCount = 0; }, 3000);
+  if(resetTapCount >= 10){
+    resetTapCount = 0;
+    resetAll();
+  }
+});
 document.getElementById('cancelLoginBtn')?.addEventListener('click', () => {
   document.getElementById('loginModal').style.display = 'none';
 });
@@ -464,7 +476,6 @@ function renderAll(){
 // ================= UI =================
 document.getElementById('filterZone').addEventListener('change', renderAll);
 document.getElementById('filterStatus').addEventListener('change', renderAll);
-document.getElementById('resetBtn').addEventListener('click', resetAll);
 
 // ================= RECHERCHE PAR NUMÉRO =================
 let highlightLayer = null;
@@ -546,6 +557,11 @@ listenToVisited();
       protection d'interface : la vraie sécurité vient des règles Firebase à l'étape 4,
       qui bloquent l'écriture côté serveur même si quelqu'un lit le code source et
       trouve le mécanisme ou appelle les fonctions JS directement.
+
+   Pour réinitialiser toute la checklist (remet les 95 boutiques à "non visité" pour
+   tout le monde) : 10 taps rapides (moins de 3s) sur la fine barre de progression
+   juste sous le titre. Ça ne marche que si tu es connecté en admin, et une
+   confirmation est demandée avant d'agir.
 
 4) Verrouille les règles de la Realtime Database (onglet "Règles" dans Realtime Database) :
    {
