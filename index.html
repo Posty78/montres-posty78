@@ -360,18 +360,21 @@ document.querySelector('header h1')?.addEventListener('click', () => {
   }
 });
 
-// Reset caché : 10 taps rapides sur la barre de progression (moins de 3s au total)
-let resetTapCount = 0;
-let resetTapTimer = null;
-document.getElementById('progressBarWrap')?.addEventListener('click', () => {
-  resetTapCount++;
-  clearTimeout(resetTapTimer);
-  resetTapTimer = setTimeout(() => { resetTapCount = 0; }, 3000);
-  if(resetTapCount >= 10){
-    resetTapCount = 0;
-    resetAll();
-  }
-});
+// Reset caché : appui long (3s) sur la légende, bien séparée du titre pour éviter toute confusion
+let resetHoldTimer = null;
+const legendEl = document.getElementById('legend');
+function startResetHold(){
+  resetHoldTimer = setTimeout(() => { resetAll(); }, 3000);
+}
+function cancelResetHold(){
+  clearTimeout(resetHoldTimer);
+}
+legendEl?.addEventListener('mousedown', startResetHold);
+legendEl?.addEventListener('touchstart', startResetHold, {passive:true});
+legendEl?.addEventListener('mouseup', cancelResetHold);
+legendEl?.addEventListener('mouseleave', cancelResetHold);
+legendEl?.addEventListener('touchend', cancelResetHold);
+legendEl?.addEventListener('touchcancel', cancelResetHold);
 document.getElementById('cancelLoginBtn')?.addEventListener('click', () => {
   document.getElementById('loginModal').style.display = 'none';
 });
@@ -559,9 +562,9 @@ listenToVisited();
       trouve le mécanisme ou appelle les fonctions JS directement.
 
    Pour réinitialiser toute la checklist (remet les 95 boutiques à "non visité" pour
-   tout le monde) : 10 taps rapides (moins de 3s) sur la fine barre de progression
-   juste sous le titre. Ça ne marche que si tu es connecté en admin, et une
-   confirmation est demandée avant d'agir.
+   tout le monde) : appui long de 3 secondes sur la légende (la ligne "centre-ville /
+   extension / déjà visité" sous la carte). Ça ne marche que si tu es connecté en
+   admin, et une confirmation est demandée avant d'agir.
 
 4) Verrouille les règles de la Realtime Database (onglet "Règles" dans Realtime Database) :
    {
